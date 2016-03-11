@@ -21,7 +21,7 @@ func main() {
 	if id == "" || secret == "" {
 		os.Exit(1)
 	}
-	a := gauth.New(id, secret, "http://"+address)
+	a := gauth.New(id, secret, "http://localhost:3000/google/callback")
 	http.Handle("/google/logout", a.LogoutHandler("/"))
 	http.Handle("/google/login", a.LoginHandler())
 	http.Handle("/google/callback", a.CallbackHandler("/"))
