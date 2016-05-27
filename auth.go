@@ -68,14 +68,22 @@ func (a *Auth) CallbackHandler(redirectURL string) http.Handler {
 	))
 }
 
-func (a *Auth) ConditionalHandler(logged bool, redirectURL string, h http.Handler) http.Handler {
+func (a *Auth) ConditionalHandler(condition func(*Auth, *http.Request) bool, redirectURL string, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if _, err := a.sessions.Get(r, name); logged && err != nil || !logged && err == nil {
+		if !condition(a, r) {
 			http.Redirect(w, r, redirectURL, http.StatusFound)
 			return
 		}
 		h.ServeHTTP(w, r)
 	})
+}
+
+func (a *Auth) LoggedHandler(redirectURL string, h http.Handler) http.Handler {
+	return a.ConditionalHandler((*Auth).connected, redirectURL, h)
+}
+
+func (a *Auth) NotLoggedHandler(redirectURL string, h http.Handler) http.Handler {
+	return a.ConditionalHandler((*Auth).disconnected, redirectURL, h)
 }
 
 func (a *Auth) WhoAmI(r *http.Request) string {
@@ -84,4 +92,12 @@ func (a *Auth) WhoAmI(r *http.Request) string {
 		return ""
 	}
 	return s.Values[key].(string)
+}
+
+func (a *Auth) connected(r *http.Request) bool {
+	return a.WhoAmI(r) != ""
+}
+
+func (a *Auth) disconnected(r *http.Request) bool {
+	return a.WhoAmI(r) == ""
 }
