@@ -2,6 +2,7 @@ package gauth
 
 import (
 	"net/http"
+	"net/url"
 
 	"github.com/dghubble/ctxh"
 	"github.com/dghubble/gologin"
@@ -17,12 +18,20 @@ const (
 	key  = "google-email"
 )
 
-func New(id, secret, redirectURL string) Auth {
+type Config struct {
+	Id       string
+	Secret   string
+	Login    string
+	Callback string
+	Logout   string
+}
+
+func New(c Config) Auth {
 	return Auth{
 		config: oauth2.Config{
-			ClientID:     id,
-			ClientSecret: secret,
-			RedirectURL:  redirectURL,
+			ClientID:     c.Id,
+			ClientSecret: c.Secret,
+			RedirectURL:  c.Callback,
 			Endpoint:     goauth.Endpoint,
 			Scopes:       []string{"profile", "email"},
 		},
@@ -32,18 +41,20 @@ func New(id, secret, redirectURL string) Auth {
 
 type Auth struct {
 	config   oauth2.Config
+	login    string
+	logout   string
 	sessions *sessions.CookieStore
 }
 
-func (a *Auth) LoginHandler() http.Handler {
-	return ctxh.NewHandler(glogin.StateHandler(
+func (a *Auth) LoginHandler() (string, http.Handler) {
+	return a.login, ctxh.NewHandler(glogin.StateHandler(
 		gologin.DebugOnlyCookieConfig,
 		glogin.LoginHandler(&a.config, nil),
 	))
 }
 
-func (a *Auth) LogoutHandler(redirectURL string) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func (a *Auth) LogoutHandler(redirectURL string) (string, http.Handler) {
+	return a.logout, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
 			a.sessions.Destroy(w, name)
 		}
@@ -51,8 +62,12 @@ func (a *Auth) LogoutHandler(redirectURL string) http.Handler {
 	})
 }
 
-func (a *Auth) CallbackHandler(redirectURL string) http.Handler {
-	return ctxh.NewHandler(glogin.StateHandler(
+func (a *Auth) CallbackHandler(redirectURL string) (string, http.Handler) {
+	u, err := url.Parse(a.config.RedirectURL)
+	if err != nil {
+		panic(err)
+	}
+	return u.Path, ctxh.NewHandler(glogin.StateHandler(
 		gologin.DebugOnlyCookieConfig,
 		glogin.CallbackHandler(&a.config, ctxh.ContextHandlerFunc(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 			googleUser, err := glogin.UserFromContext(ctx)
